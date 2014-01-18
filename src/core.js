@@ -19,6 +19,7 @@
 		this._terms[0] = [];
 		this._rules = [];
 		this._conflictStrategy = null;
+		this._eventHandler = null;
 	};
 
 	SearchModel.prototype._name = 'SearchModel';
@@ -79,6 +80,9 @@
 	};
 
 	SearchModel.prototype.addRules = function(rules) {
+		if (typeof rules === 'undefined') {
+			throw new Error('The specified rules parameter is undefined (calling addRules)');
+		}
 		for (var i = 0, rulesLength = rules.length; i < rulesLength; i++) {
 			for (var j = 0, ruleTermsLength = rules[i].terms.length; j < ruleTermsLength; j++) {
 				var t = rules[i].terms[j];
@@ -90,7 +94,16 @@
 		for (var i = 0, rulesLength = rules.length; i < rulesLength; i++) {
 			var rule = [],
 				ruleTermsLength = rules[i].terms.length,
-				highestGroupIndex = 0;
+				highestGroupIndex = 0,
+				terms = rules[i].terms,
+				action = rules[i].action,
+				args = { 'terms' : terms, 'index' : i };
+
+			if (typeof action === 'undefined' && typeof rules[i]['event'] !== 'undefined') {
+				action = this._eventHandler;
+			}
+
+			args['event'] = rules[i]['event'] || {};
 
 			for (var j = 0;j < ruleTermsLength; j++) {
 				var t = rules[i].terms[j],
@@ -122,8 +135,16 @@
 				}
 			}
 
-			rule[highestGroupIndex + 1] = ruleTermsLength; // append true term count as condition count
-			rule[highestGroupIndex + 2] = rules[i].action; // action is tail end of any rule
+			rule[highestGroupIndex + 1] = ruleTermsLength; // append true term counts as condition count
+
+			if (action) {
+				// action state is preserved in a closure; for conflict resolution, args are available externally
+				rule[highestGroupIndex + 2] = (function(fn,args){var f1=function(){fn.apply(f1, null);};f1.terms=args.terms;f1.index=args.index;f1['event']=args['event'];return f1;})(action,args);
+			}
+			else {
+				throw new Error('All rules require either \'action\' or \'event\' to be defined (if \'event\' is defined, an eventHandler must also be defined, either in the model.eventHandler or by calling addEventHandler); failing at rule index ' + i);
+			}
+
 			this._rules.push(rule);
 		}
 	};
@@ -199,6 +220,10 @@
 	};
 
 	SearchModel.prototype.executeQuery = function(state) {
+		if (typeof state === 'undefined') {
+			throw new Error('Cannot execute query on undefined state');
+		}
+
 		var matchingRules = [],
 			agenda = [];
 
@@ -210,6 +235,14 @@
 					matchingRules[j] = 0;
 				}
 				else if (matchingRules[j] === false) {
+					// rules that are proven false don't need to be evaluated
+					continue;
+				}
+
+				// if the current rule has already been matched in it's entire length, continue
+				var size = this._rules[j].length,
+					groupCount = this._rules[j][size - 2];
+				if (matchingRules[j] == groupCount) {
 					continue;
 				}
 
@@ -233,54 +266,56 @@
 				groupCount = this._rules[i][size - 2];
 
 			if (matchingRules[i] === groupCount) {
-				agenda.push(this._rules[i][size - 1]);
+				var action = this._rules[i][size - 1]; // action is always the last item
+				agenda.push(action); 
 			}
 		}
 
 		if (typeof this._conflictStrategy === 'function') {
-			this._conflictStrategy(agenda);
+			this._conflictStrategy.apply(agenda, null);
 		}
 
 		return agenda;
 	};
 
-	this.searchModel = new SearchModel();
+	this._searchModel = new SearchModel();
+};
 
-	var api = {
-		addDataModel : function(model) {
-			if (typeof model._terms !== 'undefined' && model._terms.length > 0
-				&& typeof model._rules !== 'undefined' && model._rules.length > 0) {
-				// "pre-compiled" rules incoming
-				this.searchModel._terms = model._terms;
-				this.searchModel._rules = model._rules;
-			}
-			else {
-				this.searchModel.addRules(model.rules);
-			}
-			this.searchModel._conflictStrategy = model.conflictStrategy;
-		},
-		isEqualTermId : function(a,b) { // primarily for testing purposes
-			return this.searchModel.isEqualTermId(a,b);
-		},
-		getNumberId : function(term) { // primarily for testing purposes
-			return this.searchModel.getNumberId(term);
-		},
-		getTermId : function(term) { // primarily for testing purposes
-			return this.searchModel.getTermId(term);
-		},
-		executeQuery : function(state) {
-			return this.searchModel.executeQuery(state);
-		}
-	};
+SemanticQueryEngine.prototype._name = 'SemanticQueryEngine';
 
-	if (typeof this.helpers === 'function') {
-		this.helpers(api);
+SemanticQueryEngine.prototype.addDataModel = function(model) {
+	if (model instanceof Array) {
+		this._searchModel.addRules(model);
+		return;
+	}
+
+	this._searchModel._conflictStrategy = model.conflictStrategy || this._searchModel._conflictStrategy;
+	this._searchModel._eventHandler = model.eventHandler || this._searchModel._eventHandler;
+	if (typeof model._terms !== 'undefined' && model._terms.length > 0
+		&& typeof model._rules !== 'undefined' && model._rules.length > 0) {
+		// "pre-compiled" rules incoming
+		this._searchModel._terms = model._terms;
+		this._searchModel._rules = model._rules;
 	}
 	else {
-		this.addDataModel = api.addDataModel;
-		this.getTermId = api.getTermId;
-		this.getNumberId = api.getNumberId;
-		this.isEqualTermId = api.isEqualTermId;
-		this.executeQuery = api.executeQuery;
+		this._searchModel.addRules(model.rules);
 	}
-};SemanticQueryEngine.prototype._name = 'SemanticQueryEngine';
+};
+SemanticQueryEngine.prototype.addConflictStrategy = function(fn) {
+	this._searchModel._conflictStrategy = fn;
+};
+SemanticQueryEngine.prototype.isEqualTermId = function(a,b) { // primarily for testing purposes
+	return this._searchModel.isEqualTermId(a,b);
+};
+SemanticQueryEngine.prototype.getNumberId = function(term) { // primarily for testing purposes
+	return this._searchModel.getNumberId(term);
+};
+SemanticQueryEngine.prototype.getTermId = function(term) { // primarily for testing purposes
+	return this._searchModel.getTermId(term);
+};
+SemanticQueryEngine.prototype.executeQuery = function(state) {
+	return this._searchModel.executeQuery(state);
+};
+SemanticQueryEngine.prototype.addEventHandler = function(fn) {
+	this._searchModel._eventHandler = fn;
+};

@@ -1,22 +1,24 @@
 describe('core.js', function() {
-	function desc(agenda) {
-		for (var i = 0; i < agenda.length; i++) {
-			agenda[i]();
+	function desc() {
+		for (var i = 0; i < this.length; i++) {
+			this[i]();
 		}
 	}
 
 	var lastState = '';
 
-	var A = function(terms){ lastState += 'A'; };
-	var B = function(terms){ lastState += 'B'; };
-	var C = function(terms){ lastState += 'C'; };
-	var D = function(terms){ lastState += 'D'; };
-	var E = function(terms){ lastState += 'E'; };
-	var F = function(terms){ lastState += 'F'; };
-	var G = function(terms){ lastState += 'G'; };
+	var A = function(){ lastState += 'A'; };
+	var B = function(){ lastState += 'B'; };
+	var C = function(){ lastState += 'C'; };
+	var D = function(){ lastState += 'D'; };
+	var E = function(){ lastState += 'E'; };
+	var F = function(){ lastState += 'F'; };
+	var G = function(){ lastState += 'G'; };
 
 	// store all rule terms in a single table (the binary search method at http://ejohn.org/blog/revised-javascript-dictionary-search/)
-	var testData = { rules:[], conflictStrategy : desc };
+	var testData = { rules:[], conflictStrategy : desc, eventHandler : function() {
+		lastState = this.event.name;
+	}};
 
 	/* THIS IS HOW THE DATA LOOKS AFTER REDUCTION
 	testData._terms[0] = [1,1.1,2.4];
@@ -38,11 +40,12 @@ describe('core.js', function() {
 	testData.rules[4] = { terms : [ 'hijk', 'd', 'yellow', 'dog', true ], action : E };
 	testData.rules[5] = { terms : [ 'hijk', 'd', 'yellow', 'dog', false ], action : F };
 	testData.rules[6] = { terms : [ 'hijk', 'd', 'blue', 'dog', false ], action : G };
+	testData.rules[7] = { terms : [ 'hijk', 'd', 'blue', 'dog', true ], 'event' : { name : 'H' } };
 
 	var target = null;
 
 	beforeEach(function() {
-		lastState = '';	
+		lastState = '';
 		if (target !== null) return;
 		target = new SemanticQueryEngine();
 		target.addDataModel(testData);
@@ -158,6 +161,11 @@ describe('core.js', function() {
 		expect(lastState).toBe('A');
 	});
 
+	it('should include action A for state: \'abc\', \'defg\', 1.1, \'junk\'', function() {
+		var actual = target.executeQuery(['abc', 'defg', 1.1, 'junk']);
+		expect(lastState).toBe('A');
+	});
+
 	it('should include action B for state: \'abc\', \'defg\', 2.4', function() {
 		var actual = target.executeQuery(['abc', 'defg', 2.4]);
 		expect(lastState).toBe('B');
@@ -188,8 +196,22 @@ describe('core.js', function() {
 		expect(lastState).toBe('G');
 	});
 
+	it('should include event H for state: \'hijk\', \'d\', \'blue\', \'dog\', true', function() {
+		var actual = target.executeQuery(['hijk', 'd', 'dog', 'blue', true]);
+		expect(lastState).toBe('H');
+	});
+
+
+	/*
 	it('should include action A for state: \'abc\', \'defg\', 1.2', function() {
 		var actual = target.executeQuery(['abc', 'defg', 1.2]);
 		expect(lastState).toBe('A');
 	});
+	*/
+
+	it('should return no agenda when the query is empty', function() {
+		var actual = target.executeQuery([]);
+		expect(lastState).toBe('');
+	});
+
 });

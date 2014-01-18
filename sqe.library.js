@@ -5,7 +5,8 @@ function SemanticQueryEngine() {
     this._terms = [];
     this._terms[0] = [];
     this._rules = [];
-    this._conflictStrategy = null
+    this._conflictStrategy = null;
+    this._eventHandler = null
   }
   SearchModel.prototype._name = "SearchModel";
   SearchModel.prototype._numberExists = function(term) {
@@ -49,6 +50,9 @@ function SemanticQueryEngine() {
     this._terms[l] = terms.join("")
   };
   SearchModel.prototype.addRules = function(rules) {
+    if(typeof rules === "undefined") {
+      throw new Error("The specified rules parameter is undefined (calling addRules)");
+    }
     for(var i = 0, rulesLength = rules.length;i < rulesLength;i++) {
       for(var j = 0, ruleTermsLength = rules[i].terms.length;j < ruleTermsLength;j++) {
         var t = rules[i].terms[j];
@@ -56,7 +60,11 @@ function SemanticQueryEngine() {
       }
     }
     for(var i = 0, rulesLength = rules.length;i < rulesLength;i++) {
-      var rule = [], ruleTermsLength = rules[i].terms.length, highestGroupIndex = 0;
+      var rule = [], ruleTermsLength = rules[i].terms.length, highestGroupIndex = 0, terms = rules[i].terms, action = rules[i].action, args = {"terms":terms, "index":i};
+      if(typeof action === "undefined" && typeof rules[i]["event"] !== "undefined") {
+        action = this._eventHandler
+      }
+      args["event"] = rules[i]["event"] || {};
       for(var j = 0;j < ruleTermsLength;j++) {
         var t = rules[i].terms[j], termId = this.getTermId(t), groupIndex = termId[0], matchIndex = termId[1];
         if(groupIndex > highestGroupIndex) {
@@ -78,7 +86,19 @@ function SemanticQueryEngine() {
         }
       }
       rule[highestGroupIndex + 1] = ruleTermsLength;
-      rule[highestGroupIndex + 2] = rules[i].action;
+      if(action) {
+        rule[highestGroupIndex + 2] = function(fn, args) {
+          var f1 = function() {
+            fn.apply(f1, null)
+          };
+          f1.terms = args.terms;
+          f1.index = args.index;
+          f1["event"] = args["event"];
+          return f1
+        }(action, args)
+      }else {
+        throw new Error("All rules require either 'action' or 'event' to be defined (if 'event' is defined, an eventHandler must also be defined, either in the model.eventHandler or by calling addEventHandler); failing at rule index " + i);
+      }
       this._rules.push(rule)
     }
   };
@@ -137,6 +157,9 @@ function SemanticQueryEngine() {
     return true
   };
   SearchModel.prototype.executeQuery = function(state) {
+    if(typeof state === "undefined") {
+      throw new Error("Cannot execute query on undefined state");
+    }
     var matchingRules = [], agenda = [];
     for(var i = 0, stateLength = state.length;i < stateLength;i++) {
       var t = this.getTermId(state[i]);
@@ -147,6 +170,10 @@ function SemanticQueryEngine() {
           if(matchingRules[j] === false) {
             continue
           }
+        }
+        var size = this._rules[j].length, groupCount = this._rules[j][size - 2];
+        if(matchingRules[j] == groupCount) {
+          continue
         }
         var groupNumber = t[0], groupIndex = t[1], group = this._rules[j][groupNumber];
         if(typeof group === "undefined" || typeof group[groupIndex] === "undefined" || !(group[groupIndex] instanceof Array)) {
@@ -159,41 +186,48 @@ function SemanticQueryEngine() {
     for(var i = 0, matchingRulesLength = matchingRules.length;i < matchingRulesLength;i++) {
       var size = this._rules[i].length, groupCount = this._rules[i][size - 2];
       if(matchingRules[i] === groupCount) {
-        agenda.push(this._rules[i][size - 1])
+        var action = this._rules[i][size - 1];
+        agenda.push(action)
       }
     }
     if(typeof this._conflictStrategy === "function") {
-      this._conflictStrategy(agenda)
+      this._conflictStrategy.apply(agenda, null)
     }
     return agenda
   };
-  this.searchModel = new SearchModel;
-  var api = {addDataModel:function(model) {
-    if(typeof model._terms !== "undefined" && model._terms.length > 0 && typeof model._rules !== "undefined" && model._rules.length > 0) {
-      this.searchModel._terms = model._terms;
-      this.searchModel._rules = model._rules
-    }else {
-      this.searchModel.addRules(model.rules)
-    }
-    this.searchModel._conflictStrategy = model.conflictStrategy
-  }, isEqualTermId:function(a, b) {
-    return this.searchModel.isEqualTermId(a, b)
-  }, getNumberId:function(term) {
-    return this.searchModel.getNumberId(term)
-  }, getTermId:function(term) {
-    return this.searchModel.getTermId(term)
-  }, executeQuery:function(state) {
-    return this.searchModel.executeQuery(state)
-  }};
-  if(typeof this.helpers === "function") {
-    this.helpers(api)
-  }else {
-    this.addDataModel = api.addDataModel;
-    this.getTermId = api.getTermId;
-    this.getNumberId = api.getNumberId;
-    this.isEqualTermId = api.isEqualTermId;
-    this.executeQuery = api.executeQuery
-  }
+  this._searchModel = new SearchModel
 }
 SemanticQueryEngine.prototype._name = "SemanticQueryEngine";
+SemanticQueryEngine.prototype.addDataModel = function(model) {
+  if(model instanceof Array) {
+    this._searchModel.addRules(model);
+    return
+  }
+  this._searchModel._conflictStrategy = model.conflictStrategy || this._searchModel._conflictStrategy;
+  this._searchModel._eventHandler = model.eventHandler || this._searchModel._eventHandler;
+  if(typeof model._terms !== "undefined" && model._terms.length > 0 && typeof model._rules !== "undefined" && model._rules.length > 0) {
+    this._searchModel._terms = model._terms;
+    this._searchModel._rules = model._rules
+  }else {
+    this._searchModel.addRules(model.rules)
+  }
+};
+SemanticQueryEngine.prototype.addConflictStrategy = function(fn) {
+  this._searchModel._conflictStrategy = fn
+};
+SemanticQueryEngine.prototype.isEqualTermId = function(a, b) {
+  return this._searchModel.isEqualTermId(a, b)
+};
+SemanticQueryEngine.prototype.getNumberId = function(term) {
+  return this._searchModel.getNumberId(term)
+};
+SemanticQueryEngine.prototype.getTermId = function(term) {
+  return this._searchModel.getTermId(term)
+};
+SemanticQueryEngine.prototype.executeQuery = function(state) {
+  return this._searchModel.executeQuery(state)
+};
+SemanticQueryEngine.prototype.addEventHandler = function(fn) {
+  this._searchModel._eventHandler = fn
+};
 
