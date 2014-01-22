@@ -234,10 +234,6 @@
 				if (typeof matchingRules[j] === 'undefined') {
 					matchingRules[j] = 0;
 				}
-				else if (matchingRules[j] === false) {
-					// rules that are proven false don't need to be evaluated
-					continue;
-				}
 
 				// if the current rule has already been matched in it's entire length, continue
 				var size = this._rules[j].length,
@@ -253,7 +249,6 @@
 				if (typeof group === 'undefined'
 					|| typeof group[groupIndex] === 'undefined'
 					|| !(group[groupIndex] instanceof Array)) {
-					matchingRules[j] = false; // MISS (this rule can never be true until state changes)
 					continue;
 				}
 

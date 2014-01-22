@@ -166,6 +166,11 @@ describe('core.js', function() {
 		expect(lastState).toBe('A');
 	});
 
+	it('should include action A for state: \'blue\', \'abc\', \'defg\', 1.1', function() {
+		var actual = target.executeQuery(['blue', 'abc', 'defg', 1.1]);
+		expect(lastState).toBe('A');
+	});
+
 	it('should include action B for state: \'abc\', \'defg\', 2.4', function() {
 		var actual = target.executeQuery(['abc', 'defg', 2.4]);
 		expect(lastState).toBe('B');
@@ -201,13 +206,6 @@ describe('core.js', function() {
 		expect(lastState).toBe('H');
 	});
 
-
-	/*
-	it('should include action A for state: \'abc\', \'defg\', 1.2', function() {
-		var actual = target.executeQuery(['abc', 'defg', 1.2]);
-		expect(lastState).toBe('A');
-	});
-	*/
 
 	it('should return no agenda when the query is empty', function() {
 		var actual = target.executeQuery([]);

@@ -166,10 +166,6 @@ function SemanticQueryEngine() {
       for(var j = 0, rulesLength = this._rules.length;j < rulesLength;j++) {
         if(typeof matchingRules[j] === "undefined") {
           matchingRules[j] = 0
-        }else {
-          if(matchingRules[j] === false) {
-            continue
-          }
         }
         var size = this._rules[j].length, groupCount = this._rules[j][size - 2];
         if(matchingRules[j] == groupCount) {
@@ -177,7 +173,6 @@ function SemanticQueryEngine() {
         }
         var groupNumber = t[0], groupIndex = t[1], group = this._rules[j][groupNumber];
         if(typeof group === "undefined" || typeof group[groupIndex] === "undefined" || !(group[groupIndex] instanceof Array)) {
-          matchingRules[j] = false;
           continue
         }
         matchingRules[j]++
