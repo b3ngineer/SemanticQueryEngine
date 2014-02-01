@@ -224,8 +224,7 @@
 			throw new Error('Cannot execute query on undefined state');
 		}
 
-		var matchingRules = [],
-			agenda = [];
+		var matchingRules = [], agenda = [];
 
 		for (var i = 0, stateLength = state.length; i < stateLength; i++) {
 			var t = this.getTermId(state[i]);

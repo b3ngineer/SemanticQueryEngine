@@ -1,7 +1,8 @@
 describe('core.js', function() {
-	function desc() {
+	function fifo() { // not a good conflict strategy except for test purposes
 		for (var i = 0; i < this.length; i++) {
 			this[i]();
+			if (lastState) break;
 		}
 	}
 
@@ -16,7 +17,7 @@ describe('core.js', function() {
 	var G = function(){ lastState += 'G'; };
 
 	// store all rule terms in a single table (the binary search method at http://ejohn.org/blog/revised-javascript-dictionary-search/)
-	var testData = { rules:[], conflictStrategy : desc, eventHandler : function() {
+	var testData = { rules:[], conflictStrategy : fifo, eventHandler : function() {
 		lastState = this.event.name;
 	}};
 
@@ -30,7 +31,7 @@ describe('core.js', function() {
 	testData._rules[0] = [[undefined,[0,1,1]],undefined,undefined,[[3,0,0]],[undefined,[4,1,0]],3,A];
 	testData._rules[0] = [[undefined,[0,2,1]],undefined,undefined,[[3,0,0]],[undefined,[4,1,0]],3,B];
 	testData._rules[0] = [[undefined,[0,2,1]],undefined,undefined,[[3,0,0]],[undefined,[4,2,0]],3,C];
-	...
+	... etc
 	*/
 
 	testData.rules[0] = { terms : [ 'abc', 'defg', 1.1 ], operators : [0, 0, 'greaterThanOrEqual'], action : A };
@@ -41,6 +42,7 @@ describe('core.js', function() {
 	testData.rules[5] = { terms : [ 'hijk', 'd', 'yellow', 'dog', false ], action : F };
 	testData.rules[6] = { terms : [ 'hijk', 'd', 'blue', 'dog', false ], action : G };
 	testData.rules[7] = { terms : [ 'hijk', 'd', 'blue', 'dog', true ], 'event' : { name : 'H' } };
+	testData.rules[8] = { terms : [ 'hijk' ], 'event' : { name : 'I' } };
 
 	var target = null;
 
@@ -206,10 +208,15 @@ describe('core.js', function() {
 		expect(lastState).toBe('H');
 	});
 
-
 	it('should return no agenda when the query is empty', function() {
 		var actual = target.executeQuery([]);
 		expect(lastState).toBe('');
 	});
+
+	it('should fire and event I for state \'hijk\'', function() {
+		var actual = target.executeQuery(['hijk']);
+		expect(lastState).toBe('I');
+	});
+
 
 });
