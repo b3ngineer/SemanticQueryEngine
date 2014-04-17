@@ -139,7 +139,7 @@
 
 			if (action) {
 				// action state is preserved in a closure; for conflict resolution, args are available externally
-				rule[highestGroupIndex + 2] = (function(fn,args){var f1=function(){fn.apply(f1, null);};f1.terms=args.terms;f1.index=args.index;f1['event']=args['event'];return f1;})(action,args);
+				rule[highestGroupIndex + 2] = (function(fn,args){var f1=function(){fn.apply(f1);};f1.terms=args.terms;f1.index=args.index;f1['event']=args['event'];return f1;})(action,args);
 			}
 			else {
 				throw new Error('All rules require either \'action\' or \'event\' to be defined (if \'event\' is defined, an eventHandler must also be defined, either in the model.eventHandler or by calling addEventHandler); failing at rule index ' + i);
@@ -266,7 +266,7 @@
 		}
 
 		if (typeof this._conflictStrategy === 'function') {
-			this._conflictStrategy.apply(agenda, null);
+			this._conflictStrategy.apply(agenda);
 		}
 
 		return agenda;
